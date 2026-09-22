@@ -1,5 +1,7 @@
 package org.example.taskflow.task;
 
+import org.example.taskflow.task.dto.TaskRequest;
+import org.example.taskflow.task.dto.TaskResponse;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
@@ -13,15 +15,58 @@ public class TaskService {
         this.taskRepository = taskRepository;
     }
 
-    public Task getTaskById(long id) {
-        return taskRepository.findById(id);
+    public TaskResponse getTask(Long id) {
+        Task task = taskRepository.findById(id)
+                .orElseThrow(() -> new TaskNotFoundException(id));
+
+        return toResponse(task);
     }
 
-    public List<Task> getAllTasks() {
-        return taskRepository.findAll();
+    public List<TaskResponse> getAllTasks() {
+        return taskRepository.findAll()
+                .stream()
+                .map(this::toResponse)
+                .toList();
     }
 
-    public Task createTask(Task task) {
-        return taskRepository.save(task);
+    public TaskResponse createTask(TaskRequest request) {
+        Task task = new Task();
+
+        task.setTitle(request.getTitle());
+        task.setDescription(request.getDescription());
+
+        Task savedTask = taskRepository.save(task);
+
+        return new TaskResponse(
+                savedTask.getId(),
+                savedTask.getTitle(),
+                savedTask.getDescription()
+        );
+    }
+
+    public TaskResponse updateTask(Long id, TaskRequest request) {
+        Task task = taskRepository.findById(id)
+                .orElseThrow(() -> new TaskNotFoundException(id));
+
+        task.setTitle(request.getTitle());
+        task.setDescription(request.getDescription());
+
+        Task updateTask =  taskRepository.save(task);
+        return toResponse(updateTask);
+    }
+
+    public void deleteTask(Long id) {
+        Task task = taskRepository.findById(id)
+                .orElseThrow(() -> new TaskNotFoundException(id));
+
+        taskRepository.delete(task);
+    }
+
+    private TaskResponse toResponse(Task task) {
+        return new TaskResponse(
+                task.getId(),
+                task.getTitle(),
+                task.getDescription()
+        );
     }
 }

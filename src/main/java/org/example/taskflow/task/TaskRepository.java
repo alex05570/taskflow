@@ -1,32 +1,9 @@
 package org.example.taskflow.task;
 
-import org.springframework.stereotype.Repository;
+import org.springframework.data.jpa.repository.JpaRepository;
 
-import java.util.ArrayList;
-import java.util.List;
+import java.util.Optional;
 
-@Repository
-public class TaskRepository {
+public interface TaskRepository extends JpaRepository<Task, Long> {
 
-    private final List<Task> tasks = new ArrayList<>();
-    private long nextId = 1;
-
-    public Task findById(long id) {
-        for (Task t : tasks) {
-            if (t.getId() == id) {
-                return t;
-            }
-        }
-        return null;
-    }
-
-    public List<Task> findAll() {
-        return tasks;
-    }
-
-    public Task save(Task task) {
-        task.setId(nextId++);
-        tasks.add(task);
-        return task;
-    }
 }
