@@ -1,5 +1,6 @@
 package org.example.taskflow.task;
 
+import org.example.taskflow.redis.RedisService;
 import org.example.taskflow.task.dto.TaskRequest;
 import org.example.taskflow.task.dto.TaskResponse;
 import org.springframework.stereotype.Service;
@@ -10,16 +11,28 @@ import java.util.List;
 public class TaskService {
 
     private final TaskRepository taskRepository;
+    private final RedisService redisService;
 
-    public TaskService(TaskRepository taskRepository) {
+    public TaskService(TaskRepository taskRepository, RedisService redisService) {
         this.taskRepository = taskRepository;
+        this.redisService = redisService;
     }
 
     public TaskResponse getTask(Long id) {
+        TaskResponse cachedTask = redisService.getTask(id);
+
+        if (cachedTask != null) {
+            return cachedTask;
+        }
+
         Task task = taskRepository.findById(id)
                 .orElseThrow(() -> new TaskNotFoundException(id));
 
-        return toResponse(task);
+        TaskResponse response = toResponse(task);
+
+        redisService.setTask(id, response);
+
+        return response;
     }
 
     public List<TaskResponse> getAllTasks() {
@@ -52,6 +65,9 @@ public class TaskService {
         task.setDescription(request.getDescription());
 
         Task updateTask =  taskRepository.save(task);
+
+        redisService.deleteTask(id);
+
         return toResponse(updateTask);
     }
 
@@ -60,6 +76,7 @@ public class TaskService {
                 .orElseThrow(() -> new TaskNotFoundException(id));
 
         taskRepository.delete(task);
+        redisService.deleteTask(id);
     }
 
     private TaskResponse toResponse(Task task) {

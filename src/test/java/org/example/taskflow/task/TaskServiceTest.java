@@ -1,5 +1,6 @@
 package org.example.taskflow.task;
 
+import org.example.taskflow.redis.RedisService;
 import org.example.taskflow.task.dto.TaskRequest;
 import org.example.taskflow.task.dto.TaskResponse;
 import org.junit.jupiter.api.Test;
@@ -11,14 +12,16 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import java.util.List;
 import java.util.Optional;
 
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
 import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
 class TaskServiceTest {
     @Mock
     private TaskRepository taskRepository;
+
+    @Mock
+    private RedisService redisService;
 
     @InjectMocks
     private TaskService taskService;
@@ -26,27 +29,27 @@ class TaskServiceTest {
     @Test
     void getTask_shouldReturnTask_whenTaskExist() {
         Task task = new Task();
-        task.setTitle("Learn Spring");
-        task.setDescription("Study Spring Boot");
+        task.setId(1L);
+        task.setTitle("Test task");
+        task.setDescription("Description");
 
-        when(taskRepository.findById(1L))
-                .thenReturn(Optional.of(task));
+        when(redisService.getTask(1L)).thenReturn(null);
+        when(taskRepository.findById(1L)).thenReturn(Optional.of(task));
 
-        TaskResponse response = taskService.getTask(1L);
+        TaskResponse result = taskService.getTask(1L);
 
-        assertEquals("Learn Spring", response.getTitle());
-        assertEquals("Study Spring Boot", response.getDescription());
+        assertEquals(1L, result.getId());
+        assertEquals("Test task", result.getTitle());
     }
 
     @Test
     void getTask_shouldThrowException_whenDoesNotExist() {
-
-        when(taskRepository.findById(999L))
-                .thenReturn(Optional.empty());
+        when(redisService.getTask(1L)).thenReturn(null);
+        when(taskRepository.findById(1L)).thenReturn(Optional.empty());
 
         assertThrows(
                 TaskNotFoundException.class,
-                () -> taskService.getTask(999L)
+                () -> taskService.getTask(1L)
         );
     }
 
@@ -71,8 +74,9 @@ class TaskServiceTest {
     }
 
     @Test
-    void updateTask_shouldUpdateTask_whenTaskExists() {
+    void updateTask_shouldUpdateTaskAndInvalidateCache() {
         Task task = new Task();
+        task.setId(1L);
         task.setTitle("Old title");
         task.setDescription("Old description");
 
@@ -80,31 +84,32 @@ class TaskServiceTest {
         request.setTitle("New title");
         request.setDescription("New description");
 
-        when(taskRepository.findById(1L))
-                .thenReturn(Optional.of(task));
+        when(taskRepository.findById(1L)).thenReturn(Optional.of(task));
+        when(taskRepository.save(task)).thenReturn(task);
 
-        when(taskRepository.save(task))
-                .thenReturn(task);
+        TaskResponse result = taskService.updateTask(1L, request);
 
-        TaskResponse response = taskService.updateTask(1L, request);
-
-        assertEquals("New title", response.getTitle());
-        assertEquals("New description", response.getDescription());
+        assertEquals(1L, result.getId());
+        assertEquals("New title", result.getTitle());
+        assertEquals("New description", result.getDescription());
 
         verify(taskRepository).save(task);
+        verify(redisService).deleteTask(1L);
     }
 
     @Test
-    void deleteTask_shouldDeleteTask_whenTaskExists() {
+    void deleteTask_shouldDeleteTaskAndInvalidateCache() {
         Task task = new Task();
-        task.setTitle("Task to delete");
+        task.setId(1L);
+        task.setTitle("Task");
+        task.setDescription("Description");
 
-        when(taskRepository.findById(1L))
-                .thenReturn(Optional.of(task));
+        when(taskRepository.findById(1L)).thenReturn(Optional.of(task));
 
         taskService.deleteTask(1L);
 
         verify(taskRepository).delete(task);
+        verify(redisService).deleteTask(1L);
     }
 
     @Test
@@ -127,5 +132,24 @@ class TaskServiceTest {
         assertEquals("Second task", response.get(1).getTitle());
 
         verify(taskRepository).findAll();
+    }
+
+    @Test
+    void getTask_shouldReturnCachedTask_withoutCallingRepository() {
+        TaskResponse cachedTask = new TaskResponse(
+                1L,
+                "Cached task",
+                "From Redis"
+        );
+
+        when(redisService.getTask(1L)).thenReturn(cachedTask);
+
+        TaskResponse result = taskService.getTask(1L);
+
+        assertEquals(1L, result.getId());
+        assertEquals("Cached task", result.getTitle());
+        assertEquals("From Redis", result.getDescription());
+
+        verify(taskRepository, never()).findById(1L);
     }
 }
